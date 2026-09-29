@@ -72,8 +72,7 @@ class _OtpScreenState extends State<OtpScreen> {
           '';
 
       if (token.isEmpty) {
-        token =
-            response.headers['authorization'] ?? '';
+        token = response.headers['authorization'] ?? '';
       }
 
       token = token.replaceFirst(
@@ -91,26 +90,57 @@ class _OtpScreenState extends State<OtpScreen> {
       final headers =
           Map<String, String>.from(widget.headers);
 
-      headers['authorization'] =
-          'Bearer $token';
+      headers['authorization'] = 'Bearer $token';
 
       headers['access-token'] =
-          data['accessToken']?.toString() ?? '';
+          _firstValue(data, const [
+        'accessToken',
+        'access_token',
+      ]);
 
       headers['tg-token'] =
-          data['tgToken']?.toString() ??
-          data['tg_token']?.toString() ??
-          '';
+          _firstValue(data, const [
+        'tgToken',
+        'tg_token',
+        'tg-token',
+      ]);
 
       headers['tg-refresh-token'] =
-          data['tgRefreshToken']?.toString() ??
-          data['tg_refresh_token']?.toString() ??
-          '';
+          _firstValue(data, const [
+        'tgRefreshToken',
+        'tg_refresh_token',
+        'tg-refresh-token',
+      ]);
 
       headers['tgdeviceid'] =
-          data['tgDeviceId']?.toString() ??
-          data['tg_device_id']?.toString() ??
-          '26284330';
+          _firstValue(data, const [
+        'tgDeviceId',
+        'tg_device_id',
+        'tgdeviceid',
+      ]);
+
+      /*
+       * بعض الاستجابات لا ترجع tg-token مباشرة.
+       * في هذه الحالة نستخدم الـ API token
+       * للحصول على بيانات الـ profile والـ tokens.
+       */
+      if (headers['tg-token'] == null ||
+          headers['tg-token']!.isEmpty) {
+        final profile = await api.getProfileAndTokens(
+          apiToken: token,
+          headers: headers,
+        );
+
+        if (profile != null) {
+          profile.tokens.forEach(
+            (key, value) {
+              if (value.isNotEmpty) {
+                headers[key] = value;
+              }
+            },
+          );
+        }
+      }
 
       final sessions =
           await sessionService.loadSessions();
@@ -127,9 +157,7 @@ class _OtpScreenState extends State<OtpScreen> {
         ),
       );
 
-      await sessionService.saveSessions(
-        sessions,
-      );
+      await sessionService.saveSessions(sessions);
 
       if (!mounted) return;
 
@@ -154,8 +182,25 @@ class _OtpScreenState extends State<OtpScreen> {
     }
   }
 
+  String _firstValue(
+    Map<String, dynamic> data,
+    List<String> keys,
+  ) {
+    for (final key in keys) {
+      final value = data[key];
+
+      if (value != null && value.toString().isNotEmpty) {
+        return value.toString();
+      }
+    }
+
+    return '';
+  }
+
   Map<String, dynamic> _decode(String body) {
-    if (body.isEmpty) return {};
+    if (body.isEmpty) {
+      return {};
+    }
 
     try {
       final data = jsonDecode(body);
@@ -170,7 +215,9 @@ class _OtpScreenState extends State<OtpScreen> {
 
   void showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(
+        content: Text(message),
+      ),
     );
   }
 

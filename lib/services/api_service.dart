@@ -71,6 +71,127 @@ class ApiService {
     );
   }
 
+  Future<ProfileTokensResult?> getProfileAndTokens({
+    required String apiToken,
+    required Map<String, String> headers,
+  }) async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '$apiBaseUrl/register/getProfile?api_token='
+          '${Uri.encodeQueryComponent(apiToken)}',
+        ),
+        headers: headers,
+      );
+
+      if (response.statusCode != 200) {
+        return null;
+      }
+
+      if (response.body.isEmpty) {
+        return null;
+      }
+
+      final decoded = jsonDecode(response.body);
+
+      if (decoded is! Map) {
+        return null;
+      }
+
+      final data = Map<String, dynamic>.from(decoded);
+
+      final result = <String, String>{};
+
+      _extractToken(
+        result,
+        data,
+        'tg-token',
+        const [
+          'tgToken',
+          'tg_token',
+          'tg-token',
+        ],
+      );
+
+      _extractToken(
+        result,
+        data,
+        'tg-refresh-token',
+        const [
+          'tgRefreshToken',
+          'tg_refresh_token',
+          'tg-refresh-token',
+        ],
+      );
+
+      _extractToken(
+        result,
+        data,
+        'access-token',
+        const [
+          'accessToken',
+          'access_token',
+          'access-token',
+        ],
+      );
+
+      _extractToken(
+        result,
+        data,
+        'tgdeviceid',
+        const [
+          'tgDeviceId',
+          'tg_device_id',
+          'tgdeviceid',
+        ],
+      );
+
+      return ProfileTokensResult(
+        tokens: result,
+        data: data,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _extractToken(
+    Map<String, String> result,
+    Map<String, dynamic> data,
+    String headerName,
+    List<String> possibleNames,
+  ) {
+    for (final name in possibleNames) {
+      final value = data[name];
+
+      if (value != null && value.toString().isNotEmpty) {
+        result[headerName] = value.toString();
+        return;
+      }
+    }
+
+    final nestedCandidates = [
+      data['data'],
+      data['result'],
+      data['profile'],
+    ];
+
+    for (final candidate in nestedCandidates) {
+      if (candidate is Map) {
+        final nested = Map<String, dynamic>.from(candidate);
+
+        for (final name in possibleNames) {
+          final value = nested[name];
+
+          if (value != null && value.toString().isNotEmpty) {
+            result[headerName] = value.toString();
+            return;
+          }
+        }
+      }
+    }
+  }
+
   Future<int> getBalance(
     Map<String, String> headers,
   ) async {
@@ -88,8 +209,14 @@ class ApiService {
 
       final data = jsonDecode(response.body);
 
+      if (data is! Map) {
+        return 0;
+      }
+
       return int.tryParse(
-            data['balance']?.toString() ?? '0',
+            data['balance']?.toString() ??
+                data['data']?['balance']?.toString() ??
+                '0',
           ) ??
           0;
     } catch (_) {
@@ -105,5 +232,15 @@ class SendOtpResult {
   const SendOtpResult({
     required this.response,
     required this.headers,
+  });
+}
+
+class ProfileTokensResult {
+  final Map<String, String> tokens;
+  final Map<String, dynamic> data;
+
+  const ProfileTokensResult({
+    required this.tokens,
+    required this.data,
   });
 }
