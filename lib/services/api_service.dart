@@ -416,7 +416,116 @@ class ApiService {
       stopped: stopped,
     );
   }
+
+
+Future<PackagesResult> getPackages(
+    Map<String, String> headers,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '$apiBaseUrl/user/loyalty/packages',
+        ),
+        headers: headers,
+      );
+
+      if (response.statusCode != 200) {
+        return PackagesResult(
+          success: false,
+          statusCode: response.statusCode,
+          packages: const [],
+        );
+      }
+
+      final decoded = jsonDecode(response.body);
+      final packages = _extractPackages(decoded);
+
+      return PackagesResult(
+        success: true,
+        statusCode: response.statusCode,
+        packages: packages,
+      );
+    } catch (_) {
+      return const PackagesResult(
+        success: false,
+        statusCode: 0,
+        packages: [],
+      );
+    }
+  }
+
+  List<Map<String, dynamic>> _extractPackages(
+    dynamic data,
+  ) {
+    if (data is List) {
+      return data
+          .whereType<Map>()
+          .map(
+            (item) => Map<String, dynamic>.from(item),
+          )
+          .toList();
+    }
+
+    if (data is Map) {
+      final candidates = [
+        data['packages'],
+        data['data'],
+        data['result'],
+        data['items'],
+      ];
+
+      for (final candidate in candidates) {
+        final result = _extractPackages(candidate);
+
+        if (result.isNotEmpty) {
+          return result;
+        }
+      }
+    }
+
+    return [];
+  }
+
+  Future<RedeemResult> redeemPackage({
+    required String redeemCode,
+    required Map<String, String> headers,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse(
+          '$apiBaseUrl/loyalty/redeem/'
+          '${Uri.encodeComponent(redeemCode)}',
+        ),
+        headers: headers,
+      );
+
+      dynamic data;
+
+      if (response.body.isNotEmpty) {
+        try {
+          data = jsonDecode(response.body);
+        } catch (_) {
+          data = response.body;
+        }
+      }
+
+      return RedeemResult(
+        success: response.statusCode == 200,
+        statusCode: response.statusCode,
+        data: data,
+      );
+    } catch (_) {
+      return const RedeemResult(
+        success: false,
+        statusCode: 0,
+        data: null,
+      );
+    }
+  }
 }
+
+
+
 
 class SendOtpResult {
   final http.Response response;
@@ -477,3 +586,28 @@ class CollectResult {
     required this.stopped,
   });
 }
+
+class PackagesResult {
+  final bool success;
+  final int statusCode;
+  final List<Map<String, dynamic>> packages;
+
+  const PackagesResult({
+    required this.success,
+    required this.statusCode,
+    required this.packages,
+  });
+}
+
+class RedeemResult {
+  final bool success;
+  final int statusCode;
+  final dynamic data;
+
+  const RedeemResult({
+    required this.success,
+    required this.statusCode,
+    required this.data,
+  });
+}
+
