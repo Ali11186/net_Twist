@@ -2,6 +2,15 @@ name: net_Twist Build
 
 on:
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build type"
+        required: false
+        default: "release"
+        type: choice
+        options:
+          - release
+          - debug
 
 jobs:
   build:
@@ -36,11 +45,16 @@ jobs:
         run: flutter test
 
       - name: Build APK
-        run: flutter build apk --release
+        run: |
+          if [ "${{ github.event.inputs.build_type }}" = "debug" ]; then
+            flutter build apk --debug
+          else
+            flutter build apk --release
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: net_Twist-release
+          name: net_Twist-${{ github.event.inputs.build_type }}
           path: build/app/outputs/flutter-apk/*.apk
           retention-days: 7
