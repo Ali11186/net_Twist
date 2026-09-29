@@ -522,7 +522,30 @@ Future<PackagesResult> getPackages(
       );
     }
   }
+
+
+  Future<bool> isSessionValid(
+    Map<String, String> headers,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '$apiBaseUrl/user/loyalty/balance/details',
+        ),
+        headers: headers,
+      );
+
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
 }
+
+
+
+
 
 
 

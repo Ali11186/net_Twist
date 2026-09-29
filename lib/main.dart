@@ -56,23 +56,19 @@ class _StartupScreenState extends State<StartupScreen> {
         return;
       }
 
-      // نستخدم آخر جلسة محفوظة.
       sessions.sort(
         (a, b) => b.lastUsed.compareTo(a.lastUsed),
       );
 
       final session = sessions.first;
 
-      final balance = await api.getBalance(
+      final valid = await api.isSessionValid(
         session.headers,
       );
 
-      // الرصيد وحده لا يثبت أن الجلسة صالحة دائمًا.
-      // لكن استجابة API الناجحة من getBalance تعني
-      // أن الطلب وصل للـ endpoint بشكل طبيعي.
-      if (balance >= 0) {
-        if (!mounted) return;
+      if (!mounted) return;
 
+      if (valid) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -82,11 +78,9 @@ class _StartupScreenState extends State<StartupScreen> {
             ),
           ),
         );
-
-        return;
+      } else {
+        goToLogin();
       }
-
-      goToLogin();
     } catch (_) {
       goToLogin();
     }
