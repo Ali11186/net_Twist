@@ -84,11 +84,7 @@ class ApiService {
         headers: headers,
       );
 
-      if (response.statusCode != 200) {
-        return null;
-      }
-
-      if (response.body.isEmpty) {
+      if (response.statusCode != 200 || response.body.isEmpty) {
         return null;
       }
 
@@ -99,18 +95,13 @@ class ApiService {
       }
 
       final data = Map<String, dynamic>.from(decoded);
-
       final result = <String, String>{};
 
       _extractToken(
         result,
         data,
         'tg-token',
-        const [
-          'tgToken',
-          'tg_token',
-          'tg-token',
-        ],
+        const ['tgToken', 'tg_token', 'tg-token'],
       );
 
       _extractToken(
@@ -223,6 +214,208 @@ class ApiService {
       return 0;
     }
   }
+
+  Future<AchievementsResult> getAchievements(
+    Map<String, String> headers,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '$apiBaseUrl/user/loyalty/achievements/v2',
+        ),
+        headers: headers,
+      );
+
+      if (response.statusCode != 200) {
+        return AchievementsResult(
+          success: false,
+          statusCode: response.statusCode,
+          achievements: const [],
+        );
+      }
+
+      final decoded = jsonDecode(response.body);
+
+      final achievements = _extractList(decoded);
+
+      return AchievementsResult(
+        success: true,
+        statusCode: response.statusCode,
+        achievements: achievements,
+      );
+    } catch (_) {
+      return const AchievementsResult(
+        success: false,
+        statusCode: 0,
+        achievements: [],
+      );
+    }
+  }
+
+  List<Map<String, dynamic>> _extractList(dynamic data) {
+    if (data is List) {
+      return data
+          .whereType<Map>()
+          .map(
+            (item) => Map<String, dynamic>.from(item),
+          )
+          .toList();
+    }
+
+    if (data is Map) {
+      final candidates = [
+        data['badges'],
+        data['achievements'],
+        data['tasks'],
+        data['data'],
+        data['result'],
+      ];
+
+      for (final candidate in candidates) {
+        final result = _extractList(candidate);
+
+        if (result.isNotEmpty) {
+          return result;
+        }
+      }
+    }
+
+    return [];
+  }
+
+  Future<ActionResult> collectAction({
+    required String actionId,
+    required Map<String, String> headers,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse(
+          '$apiBaseUrl/loyalty/action/'
+          '${Uri.encodeComponent(actionId)}',
+        ),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        return const ActionResult(
+          success: true,
+          completed: false,
+          forbidden: false,
+          statusCode: 200,
+        );
+      }
+
+      if (response.statusCode == 400) {
+        return const ActionResult(
+          success: false,
+          completed: true,
+          forbidden: false,
+          statusCode: 400,
+        );
+      }
+
+      if (response.statusCode == 403) {
+        return const ActionResult(
+          success: false,
+          completed: false,
+          forbidden: true,
+          statusCode: 403,
+        );
+      }
+
+      return ActionResult(
+        success: false,
+        completed: false,
+        forbidden: false,
+        statusCode: response.statusCode,
+      );
+    } catch (_) {
+      return const ActionResult(
+        success: false,
+        completed: false,
+        forbidden: false,
+        statusCode: 0,
+      );
+    }
+  }
+
+  Future<CollectResult> collectAvailableActions(
+    Map<String, String> headers,
+  ) async {
+    final result = await getAchievements(headers);
+
+    if (!result.success) {
+      return CollectResult(
+        success: false,
+        earned: 0,
+        completed: 0,
+        stopped: true,
+      );
+    }
+
+    var earned = 0;
+    var completed = 0;
+    var stopped = false;
+
+    for (final item in result.achievements) {
+      final rewarded = item['rewarded'];
+
+      if (rewarded == true ||
+          rewarded?.toString().toLowerCase() == 'true') {
+        continue;
+      }
+
+      final actionId =
+          item['actionId']?.toString() ??
+          item['action_id']?.toString() ??
+          item['id']?.toString() ??
+          '';
+
+      if (actionId.isEmpty) {
+        continue;
+      }
+
+      for (var attempt = 0;
+          attempt < maxCollectAttempts;
+          attempt++) {
+        final action = await collectAction(
+          actionId: actionId,
+          headers: headers,
+        );
+
+        if (action.success) {
+          earned++;
+          break;
+        }
+
+        if (action.completed) {
+          completed++;
+          break;
+        }
+
+        if (action.forbidden) {
+          stopped = true;
+          break;
+        }
+
+        if (action.statusCode == 0) {
+          stopped = true;
+          break;
+        }
+      }
+
+      if (stopped) {
+        break;
+      }
+    }
+
+    return CollectResult(
+      success: !stopped,
+      earned: earned,
+      completed: completed,
+      stopped: stopped,
+    );
+  }
 }
 
 class SendOtpResult {
@@ -242,5 +435,45 @@ class ProfileTokensResult {
   const ProfileTokensResult({
     required this.tokens,
     required this.data,
+  });
+}
+
+class AchievementsResult {
+  final bool success;
+  final int statusCode;
+  final List<Map<String, dynamic>> achievements;
+
+  const AchievementsResult({
+    required this.success,
+    required this.statusCode,
+    required this.achievements,
+  });
+}
+
+class ActionResult {
+  final bool success;
+  final bool completed;
+  final bool forbidden;
+  final int statusCode;
+
+  const ActionResult({
+    required this.success,
+    required this.completed,
+    required this.forbidden,
+    required this.statusCode,
+  });
+}
+
+class CollectResult {
+  final bool success;
+  final int earned;
+  final int completed;
+  final bool stopped;
+
+  const CollectResult({
+    required this.success,
+    required this.earned,
+    required this.completed,
+    required this.stopped,
   });
 }

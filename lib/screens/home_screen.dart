@@ -19,38 +19,80 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final api = ApiService();
 
-  bool loading = true;
+  bool loadingBalance = true;
+  bool loadingTasks = false;
+
   int balance = 0;
+  int taskCount = 0;
 
   @override
   void initState() {
     super.initState();
     loadBalance();
+    loadTasks();
   }
 
   Future<void> loadBalance() async {
+    if (mounted) {
+      setState(() {
+        loadingBalance = true;
+      });
+    }
+
+    final result = await api.getBalance(widget.headers);
+
+    if (!mounted) return;
+
     setState(() {
-      loading = true;
+      balance = result;
+      loadingBalance = false;
+    });
+  }
+
+  Future<void> loadTasks() async {
+    if (mounted) {
+      setState(() {
+        loadingTasks = true;
+      });
+    }
+
+    final result = await api.getAchievements(widget.headers);
+
+    if (!mounted) return;
+
+    setState(() {
+      taskCount = result.achievements.length;
+      loadingTasks = false;
+    });
+  }
+
+  Future<void> collectTasks() async {
+    setState(() {
+      loadingTasks = true;
     });
 
-    try {
-      final result = await api.getBalance(widget.headers);
+    final result =
+        await api.collectAvailableActions(widget.headers);
 
-      if (!mounted) return;
+    if (!mounted) return;
 
-      setState(() {
-        balance = result;
-        loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
+    setState(() {
+      loadingTasks = false;
+    });
 
-      setState(() {
-        loading = false;
-      });
-
-      showMessage('تعذر تحميل الرصيد');
+    if (result.stopped) {
+      showMessage(
+        'توقف جمع المهام بسبب استجابة من الخادم.',
+      );
+    } else {
+      showMessage(
+        'تم جمع ${result.earned} مكافأة، '
+        'ومكتمل مسبقًا: ${result.completed}',
+      );
     }
+
+    await loadBalance();
+    await loadTasks();
   }
 
   void showMessage(String message) {
@@ -69,7 +111,10 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: true,
       ),
       body: RefreshIndicator(
-        onRefresh: loadBalance,
+        onRefresh: () async {
+          await loadBalance();
+          await loadTasks();
+        },
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
@@ -98,11 +143,10 @@ class _HomeScreenState extends State<HomeScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.grey.shade400,
-                fontSize: 16,
               ),
             ),
 
-            const SizedBox(height: 35),
+            const SizedBox(height: 30),
 
             Card(
               child: Padding(
@@ -116,16 +160,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 12),
                     const Text(
                       'الرصيد',
-                      style: TextStyle(
-                        fontSize: 18,
-                      ),
+                      style: TextStyle(fontSize: 18),
                     ),
                     const SizedBox(height: 8),
-                    loading
+                    loadingBalance
                         ? const SizedBox(
                             width: 28,
                             height: 28,
-                            child: CircularProgressIndicator(
+                            child:
+                                CircularProgressIndicator(
                               strokeWidth: 2,
                             ),
                           )
@@ -141,32 +184,68 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+
+            Card(
+              child: ListTile(
+                leading: const Icon(
+                  Icons.task_alt_outlined,
+                ),
+                title: const Text(
+                  'المهام والإنجازات',
+                ),
+                subtitle: Text(
+                  loadingTasks
+                      ? 'جاري التحميل...'
+                      : 'عدد المهام: $taskCount',
+                ),
+                trailing: loadingTasks
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 16,
+                      ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
 
             SizedBox(
               height: 52,
               child: FilledButton.icon(
-                onPressed: loading ? null : loadBalance,
+                onPressed:
+                    loadingTasks ? null : collectTasks,
+                icon: const Icon(
+                  Icons.card_giftcard_outlined,
+                ),
+                label: const Text(
+                  'جمع المكافآت المتاحة',
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            SizedBox(
+              height: 52,
+              child: OutlinedButton.icon(
+                onPressed: loadingBalance
+                    ? null
+                    : loadBalance,
                 icon: const Icon(Icons.refresh),
-                label: const Text('تحديث الرصيد'),
+                label: const Text(
+                  'تحديث الرصيد',
+                ),
               ),
             ),
 
             const SizedBox(height: 20),
-
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.task_alt_outlined),
-                title: const Text('المهام والإنجازات'),
-                subtitle: const Text(
-                  'سيتم تفعيلها في الخطوة التالية',
-                ),
-                trailing: const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                ),
-              ),
-            ),
 
             Card(
               child: ListTile(
@@ -175,23 +254,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 subtitle: const Text(
                   'سيتم تفعيله في الخطوة التالية',
                 ),
-                trailing: const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                ),
               ),
             ),
 
             Card(
               child: ListTile(
-                leading: const Icon(Icons.card_giftcard_outlined),
-                title: const Text('الباقات والاستبدال'),
+                leading: const Icon(
+                  Icons.card_giftcard_outlined,
+                ),
+                title: const Text(
+                  'الباقات والاستبدال',
+                ),
                 subtitle: const Text(
                   'سيتم تفعيله في الخطوة التالية',
-                ),
-                trailing: const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
                 ),
               ),
             ),
