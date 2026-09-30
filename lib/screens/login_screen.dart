@@ -17,17 +17,21 @@ class _LoginScreenState extends State<LoginScreen> {
   bool loading = false;
 
   String normalizePhone(String value) {
-    var phone = value.trim();
+    var phone = value.trim().replaceAll(' ', '');
 
-    if (phone.startsWith('01')) {
-      phone = '2$phone';
-    } else if (phone.startsWith('+2')) {
-      phone = phone.substring(1);
-    } else {
-      phone = phone.replaceAll('+', '').replaceAll(' ', '');
+    if (RegExp(r'^01\\d{9}$').hasMatch(phone)) {
+      return '20${phone.substring(1)}';
     }
 
-    return phone;
+    if (RegExp(r'^\\+20\\d{10}$').hasMatch(phone)) {
+      return phone.substring(1);
+    }
+
+    if (RegExp(r'^20\\d{10}$').hasMatch(phone)) {
+      return phone;
+    }
+
+    return '';
   }
 
   Future<void> sendOtp() async {
